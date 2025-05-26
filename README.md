@@ -25,7 +25,7 @@ All necessary inputs for this Terraform configuration are conveniently collected
 | Variable Name                               | Description                                                                                             | Example Value                         |
 | :------------------------------------------ | :------------------------------------------------------------------------------------------------------ | :------------------------------------ |
 | `sase_residency`                            | Your Check Point SASE data residency region. **Options:** `perimeter81.com` (US), `in.sase.checkpoint.com` (India), `au.sase.checkpoint.com` (Australia), `eu.sase.checkpoint.com` (EU). | `"eu.sase.checkpoint.com"`            |
-| `workspace_name`                            | The name of your Check Point Harmony SASE workspace.                                                    | `"kaspars-demo-workspace"`            |
+| `workspace_name`                            | The name of your Check Point Harmony SASE workspace.                                                    | `"demo-workspace"`            |
 | `application_name`                          | The desired name for both the Enterprise Application and the App Registration in Microsoft Entra ID.      | `"CheckPoint-SASE"`                   |
 | `app_registration_client_secret_duration`   | The duration, in hours, for which the client secret for the Entra ID App Registration will be valid.    | `8760` (1 year)                       |
 | `sase_users`                                | A list of User Principal Names (UPNs) from your Entra ID tenant to assign to the Enterprise Application. | See example below.                    |
@@ -35,7 +35,7 @@ All necessary inputs for this Terraform configuration are conveniently collected
 
 ```terraform
 sase_residency                    = "eu.sase.checkpoint.com"
-workspace_name                    = "kaspars-demo-workspace"
+workspace_name                    = "demo-workspace"
 application_name                  = "CheckPoint-SASE"
 app_registration_client_secret_duration = 8760 # Example: 1 year (8760 hours)
                                            # Common durations: 6 months (4380), 2 years (17520)
