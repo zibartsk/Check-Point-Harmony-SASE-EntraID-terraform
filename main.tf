@@ -6,7 +6,6 @@ terraform {
   }
 }
 
-
 # Get well known MS applications info from hashicorp datasource
 data "azuread_application_published_app_ids" "well_known" {}
 
