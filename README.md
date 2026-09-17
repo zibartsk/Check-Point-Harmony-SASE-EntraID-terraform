@@ -10,11 +10,9 @@ Terraform creates the Entra ID application, permissions, client secret, and user
 
 After `terraform apply`:
 
-1. In Check Point SASE, go to **Settings > Identity Providers**, add **Microsoft Azure AD**, and enter the tenant domain, the Terraform `application_client_id`, and the sensitive `client_secret_value` output.
-2. Enable **SCIM Integration**, save the provider, open its settings, and click **Generate Token**. Copy the generated token.
-3. In Entra ID, open the enterprise application, choose **Provision User Accounts**, select **Bearer authentication**, and use the `scim_endpoint` output as the tenant URL and the generated token as the secret token.
-4. Enable provisioning for users and groups. Set `userName` from `mail` with precedence 2; set `emails[type eq "work"].value` from `userPrincipalName` with matching precedence 3; add `objectId` to `nickName` with matching precedence 1 and apply it only during object creation.
-5. Retain the Check Point mappings for `nickName`, `emails[type eq "work"].value`, `userName`, `active`, `name.givenName`, and `name.familyName`; remove other mappings, assign the required users/groups, and start provisioning.
+1. In Check Point SASE, go to **Settings > Identity Providers**, add **Microsoft EntraID**, and enter the tenant domain, the Terraform `application_client_id`, and the sensitive `client_secret_value` output.
+2. To see secret you will need to uncover it by running: terraform output -raw client_secret_value
+3. Enable **SCIM Integration** as described here: [Step 5 - Configuring SCIM](https://sc1.checkpoint.com/documents/Infinity_Portal/WebAdminGuides/EN/SASE-Admin-Guide/SASE_Security/Topics/microsoftentraid_scim/configure_scim_provisioning_for_users.html)
 
 The SCIM endpoint is also available with `terraform output scim_endpoint`.
 
