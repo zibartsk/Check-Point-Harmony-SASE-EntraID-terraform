@@ -1,7 +1,17 @@
 variable "sase_residency" {
-  description = "SASE residency US / EU / IN /AU"
+  description = "Check Point SASE residency hostname."
   type        = string
-  default     = "eu.sase.checkpoint.com"  # US: perimeter81.com; India: in.sase.checkpoint.com; Australia: au.sase.checkpoint.com
+  default     = "eu.sase.checkpoint.com"
+
+  validation {
+    condition = contains([
+      "perimeter81.com",
+      "eu.sase.checkpoint.com",
+      "au.sase.checkpoint.com",
+      "in.sase.checkpoint.com",
+    ], var.sase_residency)
+    error_message = "sase_residency must be perimeter81.com, eu.sase.checkpoint.com, au.sase.checkpoint.com, or in.sase.checkpoint.com."
+  }
 }
 
 variable "workspace_name" {

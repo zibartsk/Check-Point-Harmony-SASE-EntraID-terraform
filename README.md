@@ -4,9 +4,19 @@ This Terraform configuration is designed to significantly **streamline the integ
 
 ---
 
-## ⚠️ Important Note
+## Important: SCIM provisioning
 
-This Terraform currently **does not include the SCIM (System for Cross-domain Identity Management) part** of the integration. You will need to configure SCIM separately if required for user provisioning.
+Terraform creates the Entra ID application, permissions, client secret, and user/group assignments. Check Point SCIM provisioning must then be enabled in the SASE portal because the SCIM token is generated there.
+
+After `terraform apply`:
+
+1. In Check Point SASE, go to **Settings > Identity Providers**, add **Microsoft Azure AD**, and enter the tenant domain, the Terraform `application_client_id`, and the sensitive `client_secret_value` output.
+2. Enable **SCIM Integration**, save the provider, open its settings, and click **Generate Token**. Copy the generated token.
+3. In Entra ID, open the enterprise application, choose **Provision User Accounts**, select **Bearer authentication**, and use the `scim_endpoint` output as the tenant URL and the generated token as the secret token.
+4. Enable provisioning for users and groups. Set `userName` from `mail` with precedence 2; set `emails[type eq "work"].value` from `userPrincipalName` with matching precedence 3; add `objectId` to `nickName` with matching precedence 1 and apply it only during object creation.
+5. Retain the Check Point mappings for `nickName`, `emails[type eq "work"].value`, `userName`, `active`, `name.givenName`, and `name.familyName`; remove other mappings, assign the required users/groups, and start provisioning.
+
+The SCIM endpoint is also available with `terraform output scim_endpoint`.
 
 ---
 
@@ -14,7 +24,7 @@ This Terraform currently **does not include the SCIM (System for Cross-domain Id
 
 This automation essentially covers the steps outlined in the official Check Point SASE Admin Guide:
 
-[Microsoft Entra ID (formerly Azure AD) (App Registration) - Check Point SASE Admin Guide](https://sc1.checkpoint.com/documents/Infinity_Portal/WebAdminGuides/EN/SASE-Admin-Guide/Content/Topics-SASE-IdP/Azure_AD/AzureAD_AppReg.htm?tocpath=Settings%7CIdentity%20Providers%7CMicrosoft%20Entra%20ID%20(formerly%20Azure%20AD)%20(App%20Registration)%7C_____0#Microsoft_Entra_ID_(formerly_Azure_AD)_(App_Registration))
+[Microsoft Entra ID SCIM integration - Check Point SASE Admin Guide](https://sc1.checkpoint.com/documents/Infinity_Portal/WebAdminGuides/EN/SASE-Admin-Guide/SASE_Security/Topics/microsoftentraid_scim/microsoft_entra_id_scim_integration_overview.html)
 
 ---
 

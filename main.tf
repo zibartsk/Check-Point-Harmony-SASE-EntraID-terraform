@@ -1,7 +1,10 @@
 terraform {
+  required_version = ">= 1.5.0"
+
   required_providers {
     azuread = {
-      source = "hashicorp/azuread"
+      source  = "hashicorp/azuread"
+      version = ">= 2.47.0"
     }
   }
 }
@@ -14,16 +17,24 @@ resource "azuread_service_principal" "msgraph" {
   use_existing = true
 }
 
+# "Custom" is Entra ID's non-gallery template, i.e. the same template used by the
+# portal's Enterprise Applications > New application > "Create your own application" flow.
+data "azuread_application_template" "custom" {
+  display_name = "Custom"
+}
 
-# Create App registration
+# Create App registration. Setting template_id instantiates it as a custom (non-gallery)
+# Enterprise Application first (creating the linked service principal), exactly as the
+# Entra ID portal does, and this resource then edits the resulting App registration.
 resource "azuread_application" "app_registration" {
   # This will appear in the Azure portal under 'App registrations'.
-  display_name = "${var.application_name}"
+  display_name = var.application_name
+  template_id  = data.azuread_application_template.custom.template_id
 
   # Specifies if the application is multi-tenant or single-tenant.
   # "AzureADMyOrg" for single-tenant (default), "AzureADMultipleOrgs" for multi-tenant.
   sign_in_audience = "AzureADMyOrg"
- 
+
   # These are the URLs where authentication responses can be sent.
   # For web applications, this would be your application's redirect URI.
   web {
@@ -31,10 +42,21 @@ resource "azuread_application" "app_registration" {
       "https://${var.workspace_name}.${var.sase_residency}/",
       "https://auth.${var.sase_residency}/login/callback"
     ]
-    logout_url = "https://${var.workspace_name}.${var.sase_residency}"
+    logout_url = "https://${var.workspace_name}.${var.sase_residency}/"
   }
 
-  
+  # App role assignments require an explicit role on the app; Graph rejects the implicit
+  # all-zero default access role, so this is used as the default role for assigned users/groups.
+  app_role {
+    allowed_member_types = ["User"]
+    description          = "Default access role for SASE users and groups"
+    display_name         = "User"
+    enabled              = true
+    id                   = "9b8f5202-9b57-4c17-bb28-cddc37f9c8c8"
+    value                = "User"
+  }
+
+
   # Define API permissions requested by the application.
   required_resource_access {
     # Microsoft Graph API
@@ -44,7 +66,7 @@ resource "azuread_application" "app_registration" {
     resource_access {
       # User.Read - Allows users to sign in to the app, and allows the app to read the profile of signed-in users.
       id   = azuread_service_principal.msgraph.oauth2_permission_scope_ids["User.Read"]
-      type = "Scope"                                # 'Scope' indicates a delegated permission
+      type = "Scope" # 'Scope' indicates a delegated permission
     }
 
     resource_access {
@@ -54,7 +76,7 @@ resource "azuread_application" "app_registration" {
     }
 
     resource_access {
-      # Directory.AccessAsUser.All - Allows the app to have the same access to information in your work or school directory as you do.
+      # Directory.AccessAsUser.All - Allows the app to access the directory as the signed-in user.
       id   = azuread_service_principal.msgraph.oauth2_permission_scope_ids["Directory.AccessAsUser.All"]
       type = "Scope"
     }
@@ -63,16 +85,17 @@ resource "azuread_application" "app_registration" {
     resource_access {
       # Directory.Read.All - Allows the app to read data in your organization's directory, such as users, groups, and devices.
       id   = azuread_service_principal.msgraph.app_role_ids["Directory.Read.All"]
-      type = "Role"                                 # 'Role' indicates an application permission
+      type = "Role" # 'Role' indicates an application permission
     }
   }
 }
 
 
-# Create Entrprise Application
+# The enterprise application (service principal) is already created by instantiating the
+# template above, so import it here instead of creating a new one.
 resource "azuread_service_principal" "enterprise_application" {
-  # Link the service principal to the application registration created above.
-  client_id = azuread_application.app_registration.client_id
+  client_id    = azuread_application.app_registration.client_id
+  use_existing = true
   feature_tags {
     enterprise = true
   }
@@ -94,14 +117,14 @@ resource "azuread_app_role_assignment" "directory_read_all_admin_consent" {
 }
 
 
-# Grant admin consent for multiple delegated permissions (User.Read, Directory.Read.All, Directory.AccessAsUser.All)
+# Grant admin consent for the delegated permissions required by Check Point
 resource "azuread_service_principal_delegated_permission_grant" "all_delegated_admin_consent" {
   # The object ID of the service principal (enterprise application) that is receiving the permission.
   service_principal_object_id = azuread_service_principal.enterprise_application.object_id
-  
+
   # The object ID of the resource service principal (the API) to which the permission is being granted.
   resource_service_principal_object_id = azuread_service_principal.msgraph.object_id
-  
+
   # A list of delegated permission claim values
   claim_values = ["User.Read", "Directory.Read.All", "Directory.AccessAsUser.All"]
 }
@@ -124,7 +147,7 @@ resource "azuread_application_password" "app_secret" {
 
 # Data source to look up the specific user by their User Principal Name (UPN)
 data "azuread_user" "assigned_users" {
-  for_each = toset(var.sase_users)
+  for_each            = toset(var.sase_users)
   user_principal_name = each.value
 }
 
@@ -139,9 +162,10 @@ resource "azuread_app_role_assignment" "assign_multiple_users" {
   # The object ID of the enterprise application (service principal) to which the user is being assigned.
   resource_object_id = azuread_service_principal.enterprise_application.object_id
 
-  # When assigning to the default access role, use the well-known ID for the default user role.
-  # This ID is '00000000-0000-0000-0000-000000000000' if no custom app roles are defined.
-  app_role_id = "00000000-0000-0000-0000-000000000000"
+  # Assign to the explicit default 'User' role defined on the app registration.
+  # Falls back to a placeholder GUID so destroy plans validate even if the map is empty (the
+  # value is irrelevant on delete since app_role_id isn't used to identify what to remove).
+  app_role_id = try(azuread_service_principal.enterprise_application.app_role_ids["User"], "00000000-0000-0000-0000-000000000000")
 }
 
 
@@ -165,9 +189,10 @@ resource "azuread_app_role_assignment" "assign_multiple_groups" {
   # The object ID of the enterprise application (service principal) to which the group is being assigned.
   resource_object_id = azuread_service_principal.enterprise_application.object_id
 
-  # When assigning to the default access role, use the well-known ID for the default user role.
-  # This ID is '00000000-0000-0000-0000-000000000000' if no custom app roles are defined.
-  app_role_id = "00000000-0000-0000-0000-000000000000"
+  # Assign to the explicit default 'User' role defined on the app registration.
+  # Falls back to a placeholder GUID so destroy plans validate even if the map is empty (the
+  # value is irrelevant on delete since app_role_id isn't used to identify what to remove).
+  app_role_id = try(azuread_service_principal.enterprise_application.app_role_ids["User"], "00000000-0000-0000-0000-000000000000")
 }
 
 # Output the Application (Client) ID and Object ID
@@ -189,5 +214,6 @@ output "application_object_id" {
 output "client_secret_value" {
   description = "The value of the generated client secret. Treat as sensitive!"
   value       = azuread_application_password.app_secret.value
-  sensitive   = true # Mark as sensitive to prevent it from being shown in plain text in Terraform logs
+  sensitive   = true
 }
+
